@@ -1,0 +1,5 @@
+node_modules/
+data/
+uploads/
+server.log
+CURRENT_URL.txt

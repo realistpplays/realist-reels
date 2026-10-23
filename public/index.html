@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Realist Reels</title>
+<style>
+ *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+ html,body{height:100%;background:#000;color:#fff;font-family:-apple-system,Arial,sans-serif;overflow:hidden}
+ header{position:fixed;top:0;left:0;right:0;z-index:20;display:none;justify-content:center;gap:26px;padding:14px 0 8px;background:linear-gradient(#000a,transparent)}
+ header button{background:none;border:0;color:#bbb;font-size:17px;font-weight:600;cursor:pointer;padding:4px 2px}
+ header button.on{color:#fff;border-bottom:3px solid #35be8b}
+ #feed{height:100dvh;overflow-y:auto;scroll-snap-type:y mandatory;scrollbar-width:none;display:none}
+ #feed::-webkit-scrollbar{display:none}
+ .reel{position:relative;height:100dvh;scroll-snap-align:start;scroll-snap-stop:always;background:#000}
+ .reel video{width:100%;height:100%;object-fit:cover;display:block}
+ .prog{position:absolute;top:0;left:0;height:3px;background:#35be8b;width:0;z-index:5}
+ .shade{position:absolute;inset:auto 0 0 0;height:45%;background:linear-gradient(transparent,#000c);pointer-events:none}
+ .meta{position:absolute;left:12px;bottom:86px;right:84px;z-index:6}
+ .meta .user{font-weight:800;font-size:17px}
+ .meta .chan{display:inline-block;background:#35be8b;color:#04120b;font-weight:800;font-size:11px;border-radius:6px;padding:2px 7px;margin-left:6px;vertical-align:2px}
+ .meta .cap{font-size:14px;line-height:1.35;margin-top:6px}
+ .meta .sound{font-size:13px;margin-top:7px;color:#ddd}
+ .rail{position:absolute;right:8px;bottom:96px;z-index:6;display:flex;flex-direction:column;align-items:center;gap:16px}
+ .rail button{background:none;border:0;color:#fff;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px;font-size:12px;font-weight:600}
+ .rail .ic{width:46px;height:46px;border-radius:50%;background:#222c;display:flex;align-items:center;justify-content:center;font-size:22px}
+ .rail button.liked .ic{color:#ff2e63}.rail button.saved .ic{color:#ffd23f}
+ .avatar{width:48px;height:48px;border-radius:50%;background:#35be8b;border:2px solid #fff;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:20px;color:#04120b}
+ .followwrap{position:relative}
+ .followdot{position:absolute;bottom:-8px;left:50%;transform:translateX(-50%);width:18px;height:18px;border-radius:50%;background:#ff2e63;color:#fff;font-size:14px;line-height:16px;text-align:center;border:0;cursor:pointer}
+ .heartburst{position:absolute;z-index:9;font-size:90px;color:#ff2e63;pointer-events:none;opacity:0}
+ nav{position:fixed;bottom:0;left:0;right:0;z-index:20;background:#000;border-top:1px solid #222;display:none;justify-content:space-around;padding:8px 0 calc(8px + env(safe-area-inset-bottom))}
+ nav button{background:none;border:0;color:#bbb;font-size:10px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px}
+ nav button.on{color:#fff} nav .ni{font-size:21px}
+ nav .create{background:#35be8b;color:#04120b;width:46px;height:32px;border-radius:9px;font-size:22px;font-weight:900;display:flex;align-items:center;justify-content:center}
+ .sheet{position:fixed;left:0;right:0;bottom:0;top:32%;background:#141419;z-index:40;border-radius:16px 16px 0 0;transform:translateY(105%);transition:transform .3s;display:flex;flex-direction:column}
+ .sheet.open{transform:translateY(0)}
+ .sheet h3{text-align:center;padding:13px;font-size:15px;border-bottom:1px solid #26262e}
+ .clist{flex:1;overflow-y:auto;padding:10px 14px}
+ .cmt{margin-bottom:13px;font-size:14px}.cmt b{margin-right:7px}.cmt span{color:#ddd}.cmt small{display:block;color:#888;margin-top:2px}
+ .cbar{display:flex;gap:8px;padding:10px;border-top:1px solid #26262e}
+ .cbar input{flex:1;background:#22222a;border:0;border-radius:20px;color:#fff;padding:10px 14px;font-size:14px}
+ .cbar button,.bigbtn{background:#35be8b;border:0;border-radius:20px;padding:10px 16px;font-weight:800;color:#04120b;cursor:pointer}
+ .page{position:fixed;inset:0;background:#000;z-index:30;display:none;flex-direction:column}
+ .page.open{display:flex}
+ .page .top{padding:16px;text-align:center;font-weight:800;font-size:18px;border-bottom:1px solid #222;position:relative}
+ .pinfo{text-align:center;padding:18px}.pava{width:88px;height:88px;border-radius:50%;background:#35be8b;margin:0 auto 10px;display:flex;align-items:center;justify-content:center;font-size:38px;font-weight:900;color:#04120b}
+ .stats{display:flex;justify-content:center;gap:34px;margin:14px 0;font-size:14px}.stats b{display:block;font-size:17px}
+ .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:2px;overflow-y:auto}
+ .grid video{width:100%;aspect-ratio:3/4;object-fit:cover;background:#111}
+ .empty{padding:50px 30px;text-align:center;color:#999;line-height:1.6;height:100dvh;display:flex;flex-direction:column;justify-content:center}
+ .toast{position:fixed;top:70px;left:50%;transform:translateX(-50%);background:#35be8b;color:#04120b;font-weight:800;padding:9px 18px;border-radius:20px;z-index:60;display:none;font-size:14px;max-width:88vw;text-align:center}
+ .x{position:absolute;top:10px;right:14px;background:none;border:0;color:#fff;font-size:22px;cursor:pointer;z-index:5}
+ /* auth */
+ #auth{position:fixed;inset:0;background:#0b0b0f;z-index:50;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:26px}
+ #auth .logo{font-size:40px;font-weight:900;letter-spacing:.5px} #auth .logo em{color:#35be8b;font-style:normal}
+ #auth .tag{color:#9a97a3;margin:8px 0 30px}
+ #auth form{width:100%;max-width:340px;display:flex;flex-direction:column;gap:10px}
+ #auth input{background:#1a1a21;border:1px solid #2a2a33;border-radius:12px;color:#fff;padding:13px 14px;font-size:16px}
+ #auth .err{color:#ff6b8f;font-size:14px;min-height:18px;text-align:center}
+ #auth .switch{background:none;border:0;color:#35be8b;cursor:pointer;font-size:14px;margin-top:12px}
+ .capbox{display:flex;gap:8px;margin-top:10px}.capbox input{flex:1;background:#22222a;border:0;border-radius:12px;color:#fff;padding:11px 13px;font-size:14px}
+</style>
+</head>
+<body>
+<div id="auth">
+  <div class="logo">REALIST <em>REELS</em></div>
+  <div class="tag">Stay Real. Stay Focused.</div>
+  <form id="authform">
+    <input id="a_email" type="email" placeholder="Email" autocomplete="email" required>
+    <input id="a_pass" type="password" placeholder="Password (6+ characters)" autocomplete="current-password" required>
+    <input id="a_handle" placeholder="Handle (e.g. realistp)" style="display:none">
+    <input id="a_name" placeholder="Display name" style="display:none">
+    <div class="err" id="a_err"></div>
+    <button class="bigbtn" id="a_submit" type="submit">Log in</button>
+  </form>
+  <button class="switch" id="a_switch">New here? Create an account</button>
+</div>
+
+<header id="hdr"><button id="tabFollowing">Following</button><button id="tabForYou" class="on">For You</button></header>
+<main id="feed"></main>
+
+<div class="sheet" id="csheet">
+  <button class="x" id="cx">✕</button><h3 id="ctitle">Comments</h3>
+  <div class="clist" id="clist"></div>
+  <div class="cbar"><input id="cinput" placeholder="Add a comment…"><button id="csend">Post</button></div>
+</div>
+
+<div class="sheet" id="upsheet" style="top:auto;height:auto">
+  <button class="x" id="ux">✕</button><h3>Post a reel</h3>
+  <div style="padding:16px">
+    <div class="capbox"><input id="upcap" placeholder="Caption…"></div>
+    <div class="capbox"><input id="upchan" placeholder="Channel (optional, e.g. GULLY GAMES)"></div>
+    <button class="bigbtn" id="upgo" style="width:100%;margin-top:14px">Choose video & post</button>
+    <div id="upstatus" style="color:#9a97a3;font-size:13px;margin-top:10px;text-align:center"></div>
+  </div>
+</div>
+
+<div class="page" id="profile">
+  <div class="top"><span id="ptitle">@you</span><button class="x" id="px">✕</button></div>
+  <div class="pinfo">
+    <div class="pava" id="pava">?</div><div style="font-weight:800;font-size:19px" id="pname"></div>
+    <div class="stats"><span><b id="stFollowing">0</b>Following</span><span><b id="stFollowers">0</b>Followers</span><span><b id="stLikes">0</b>Likes</span></div>
+    <div style="color:#aaa;font-size:14px" id="pbio"></div>
+    <button class="bigbtn" id="pfollow" style="display:none;margin-top:12px">Follow</button>
+    <button class="bigbtn" id="plogout" style="display:none;margin-top:12px;background:#22222a;color:#fff">Log out</button>
+  </div>
+  <div class="grid" id="pgrid"></div>
+</div>
+
+<div class="toast" id="toast"></div>
+<input type="file" id="upfile" accept="video/*" hidden>
+
+<nav id="navb">
+  <button class="on" id="nHome"><span class="ni">🏠</span>Home</button>
+  <button id="nDisc"><span class="ni">🔍</span>Discover</button>
+  <button id="nCreate"><span class="create">+</span></button>
+  <button id="nInbox"><span class="ni">💬</span>Inbox</button>
+  <button id="nProf"><span class="ni">👤</span>Profile</button>
+</nav>
+
+<script>
+const $=id=>document.getElementById(id);
+const fmt=n=>n>=1000?(n/1000).toFixed(1).replace('.0','')+'K':''+(n||0);
+let me=null, mode='foryou', curReel=null, profileHandle=null;
+async function api(p,opts={}){const r=await fetch(p,{headers:{'Content-Type':'application/json'},...opts});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||'Something went wrong');return d;}
+const post=(p,body)=>api(p,{method:'POST',body:body?JSON.stringify(body):undefined});
+function toast(m){const t=$('toast');t.textContent=m;t.style.display='block';setTimeout(()=>t.style.display='none',2000);}
+
+/* ---------- auth ---------- */
+let signup=false;
+$('a_switch').onclick=()=>{signup=!signup;$('a_handle').style.display=signup?'block':'none';$('a_name').style.display=signup?'block':'none';$('a_submit').textContent=signup?'Create account':'Log in';$('a_switch').textContent=signup?'Already have an account? Log in':'New here? Create an account';$('a_err').textContent='';};
+$('authform').addEventListener('submit',async e=>{e.preventDefault();$('a_err').textContent='';
+ try{const body={email:$('a_email').value,password:$('a_pass').value};
+  if(signup){body.handle=$('a_handle').value;body.name=$('a_name').value;}
+  const d=await post(signup?'/api/signup':'/api/login',body);me=d.user;enterApp();
+ }catch(err){$('a_err').textContent=err.message;}});
+async function enterApp(){
+ $('auth').style.display='none';$('hdr').style.display='flex';$('feed').style.display='block';$('navb').style.display='flex';
+ loadFeed();
+}
+(async()=>{try{const d=await api('/api/me');me=d.user;enterApp();}catch(e){}})();
+
+/* ---------- feed ---------- */
+async function loadFeed(){
+ const feed=$('feed');feed.innerHTML='';
+ let reels=[];try{reels=(await api('/api/feed?tab='+mode)).reels;}catch(e){toast(e.message);return;}
+ if(!reels.length){feed.innerHTML='<div class="empty">Nothing here yet.<br>'+(mode==='following'?'Follow a creator and their reels land here.':'Be the first to post — tap + below.')+'</div>';return;}
+ reels.forEach(r=>feed.appendChild(reelEl(r)));
+ observe();
+}
+function reelEl(r){
+ const el=document.createElement('section');el.className='reel';
+ el.innerHTML=`
+  <video src="${r.file}" loop playsinline preload="metadata"></video>
+  <div class="prog"></div><div class="shade"></div><div class="heartburst">❤️</div>
+  <div class="meta"><div class="user">@${r.user.handle}${r.channel?`<span class="chan">${r.channel}</span>`:''}</div>
+   <div class="cap"></div><div class="sound">🎵 ${r.sound}</div></div>
+  <div class="rail">
+   <div class="followwrap"><div class="avatar">${r.user.handle[0].toUpperCase()}</div>
+    ${(!r.mine&&!r.following)?'<button class="followdot">+</button>':''}</div>
+   <button data-act="like" class="${r.liked?'liked':''}"><span class="ic">❤️</span><span class="n">${fmt(r.likes)}</span></button>
+   <button data-act="comment"><span class="ic">💬</span><span class="n">${fmt(r.comments)}</span></button>
+   <button data-act="save" class="${r.saved?'saved':''}"><span class="ic">🔖</span><span class="n">${fmt(r.saves)}</span></button>
+   <button data-act="share"><span class="ic">↗️</span><span class="n">Share</span></button>
+   <button data-act="mute"><span class="ic">🔊</span></button>
+  </div>`;
+ el.querySelector('.cap').textContent=r.caption||'';
+ const v=el.querySelector('video');
+ v.addEventListener('timeupdate',()=>{el.querySelector('.prog').style.width=(v.duration?(v.currentTime/v.duration*100):0)+'%';});
+ let last=0;
+ v.addEventListener('click',()=>{const n=Date.now();if(n-last<300){burst(el);if(!r.liked)toggleLike(r,el);}else{v.paused?v.play():v.pause();}last=n;});
+ el.querySelectorAll('.rail button[data-act]').forEach(b=>b.addEventListener('click',ev=>{ev.stopPropagation();act(b.dataset.act,r,el);}));
+ const fd=el.querySelector('.followdot');if(fd)fd.addEventListener('click',async ev=>{ev.stopPropagation();await post('/api/users/'+r.user.handle+'/follow');toast('Following @'+r.user.handle);loadFeed();});
+ el.querySelector('.avatar').addEventListener('click',()=>openProfile(r.user.handle));
+ return el;
+}
+function burst(el){const h=el.querySelector('.heartburst');h.style.left='50%';h.style.top='42%';h.animate([{opacity:0,transform:'translate(-50%,-50%) scale(.4)'},{opacity:1,transform:'translate(-50%,-50%) scale(1.15)'},{opacity:0,transform:'translate(-50%,-60%) scale(1)'}],{duration:650});}
+async function toggleLike(r,el){try{const d=await post('/api/reels/'+r.id+'/like');Object.assign(r,d.reel);refreshRail(el,r);}catch(e){toast(e.message);}}
+function refreshRail(el,r){const like=el.querySelector('[data-act="like"]');like.classList.toggle('liked',r.liked);like.querySelector('.n').textContent=fmt(r.likes);
+ const sv=el.querySelector('[data-act="save"]');sv.classList.toggle('saved',r.saved);sv.querySelector('.n').textContent=fmt(r.saves);
+ el.querySelector('[data-act="comment"] .n').textContent=fmt(r.comments);}
+async function act(a,r,el){
+ if(a==='like'){if(!r.liked)burst(el);toggleLike(r,el);}
+ if(a==='save'){try{const d=await post('/api/reels/'+r.id+'/save');Object.assign(r,d.reel);refreshRail(el,r);toast(r.saved?'Saved':'Removed from saved');}catch(e){toast(e.message);}}
+ if(a==='share'){if(navigator.share)navigator.share({title:'Realist Reels',text:r.caption,url:location.href}).catch(()=>{});else toast('Copy the page link to share');}
+ if(a==='mute'){const vs=document.querySelectorAll('video');const m=!vs[0].muted;vs.forEach(v=>v.muted=m);toast(m?'Muted':'Sound on');}
+ if(a==='comment')openComments(r,el);
+}
+function observe(){const io=new IntersectionObserver(es=>{es.forEach(e=>{const v=e.target.querySelector('video');if(!v)return;if(e.intersectionRatio>0.6)v.play().catch(()=>{});else v.pause();});},{threshold:[0.6]});
+ document.querySelectorAll('.reel').forEach(x=>io.observe(x));}
+
+/* ---------- comments ---------- */
+async function openComments(r,el){curReel={r,el};$('csheet').classList.add('open');renderComments(r);}
+async function renderComments(r){
+ const d=await api('/api/reels/'+r.id+'/comments');
+ $('ctitle').textContent='Comments · '+d.comments.length;
+ $('clist').innerHTML=d.comments.length?d.comments.map(c=>`<div class="cmt"><b>@${c.user.handle}</b><span></span><small>${new Date(c.created).toLocaleDateString()}</small></div>`).join(''):'<div class="cmt"><span style="color:#888">No comments yet — start it off.</span></div>';
+ [...$('clist').querySelectorAll('.cmt span')].forEach((s,i)=>{if(d.comments[i])s.textContent=d.comments[i].text;});
+}
+$('cx').onclick=()=>$('csheet').classList.remove('open');
+$('csend').onclick=async()=>{const t=$('cinput').value.trim();if(!t||!curReel)return;
+ try{await post('/api/reels/'+curReel.r.id+'/comments',{text:t});$('cinput').value='';curReel.r.comments++;refreshRail(curReel.el,curReel.r);renderComments(curReel.r);}catch(e){toast(e.message);}};
+
+/* ---------- profile ---------- */
+async function openProfile(handle){
+ profileHandle=handle;
+ try{const d=await api('/api/users/'+handle);
+  $('ptitle').textContent='@'+d.user.handle;$('pava').textContent=d.user.handle[0].toUpperCase();
+  $('pname').textContent=d.user.name;$('pbio').textContent=d.user.bio||'';
+  $('stFollowing').textContent=d.followingCount;$('stFollowers').textContent=fmt(d.followers);$('stLikes').textContent=fmt(d.totalLikes);
+  const mine=d.user.handle===me.handle;
+  $('pfollow').style.display=mine?'none':'inline-block';$('pfollow').textContent=d.following?'Following':'Follow';
+  $('plogout').style.display=mine?'inline-block':'none';
+  const g=$('pgrid');g.innerHTML='';d.reels.forEach(r=>{const v=document.createElement('video');v.src=r.file;v.muted=true;v.playsInline=true;v.preload='metadata';g.appendChild(v);});
+  $('profile').classList.add('open');
+ }catch(e){toast(e.message);}
+}
+$('pfollow').onclick=async()=>{const d=await post('/api/users/'+profileHandle+'/follow');$('pfollow').textContent=d.following?'Following':'Follow';loadFeed();};
+$('plogout').onclick=async()=>{await post('/api/logout');location.reload();};
+$('px').onclick=()=>$('profile').classList.remove('open');
+
+/* ---------- nav & upload ---------- */
+$('tabForYou').onclick=()=>{mode='foryou';$('tabForYou').classList.add('on');$('tabFollowing').classList.remove('on');loadFeed();};
+$('tabFollowing').onclick=()=>{mode='following';$('tabFollowing').classList.add('on');$('tabForYou').classList.remove('on');loadFeed();};
+$('nHome').onclick=()=>{$('profile').classList.remove('open');$('feed').scrollTo({top:0,behavior:'smooth'});};
+$('nDisc').onclick=()=>toast('Discover lands in Phase 2');
+$('nInbox').onclick=()=>toast('Inbox lands in Phase 2');
+$('nProf').onclick=()=>openProfile(me.handle);
+$('nCreate').onclick=()=>$('upsheet').classList.add('open');
+$('ux').onclick=()=>$('upsheet').classList.remove('open');
+$('upgo').onclick=()=>$('upfile').click();
+$('upfile').addEventListener('change',async e=>{
+ const f=e.target.files[0];if(!f)return;
+ $('upstatus').textContent='Uploading… ('+(f.size/1048576).toFixed(1)+' MB)';
+ const fd=new FormData();fd.append('video',f);fd.append('caption',$('upcap').value);fd.append('channel',$('upchan').value);
+ try{const r=await fetch('/api/reels',{method:'POST',body:fd});const d=await r.json();if(!r.ok)throw new Error(d.error||'Upload failed');
+  $('upstatus').textContent='Posted 🎉';$('upcap').value='';$('upchan').value='';
+  setTimeout(()=>{$('upsheet').classList.remove('open');$('upstatus').textContent='';mode='foryou';loadFeed();},700);
+ }catch(err){$('upstatus').textContent=err.message;}
+ e.target.value='';
+});
+</script>
+</body>
+</html>
