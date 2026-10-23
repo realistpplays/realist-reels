@@ -23,7 +23,7 @@ const state = fs.existsSync(statePath) ? JSON.parse(fs.readFileSync(statePath, '
     const caption = fs.existsSync(path.join(dir, 'caption.txt'))
       ? fs.readFileSync(path.join(dir, 'caption.txt'), 'utf8').trim().replace(/\s*\n\s*/g, ' ').slice(0, 480) : '';
     const idKey = crypto.createHash('sha1').update(base + '|' + dir + '/' + video + '|' + caption).digest('hex');
-    if (state[idKey]) { console.log(d, ': already imported'); skipped++; continue; }
+    if (state[idKey] && !process.env.FORCE) { console.log(d, ": already imported"); skipped++; continue; }
     const fd = new FormData();
     fd.append('video', new Blob([fs.readFileSync(path.join(dir, video))], { type: 'video/mp4' }), video);
     fd.append('handle', handle); fd.append('channel', channel || ''); fd.append('caption', caption);
