@@ -23,6 +23,12 @@ CREATE TABLE IF NOT EXISTS saves(user_id INTEGER, reel_id INTEGER, PRIMARY KEY(u
 CREATE TABLE IF NOT EXISTS follows(follower INTEGER, following INTEGER, PRIMARY KEY(follower, following));
 CREATE TABLE IF NOT EXISTS comments(id INTEGER PRIMARY KEY, reel_id INTEGER, user_id INTEGER, text TEXT, created INTEGER);
 `);
+try { db.exec('ALTER TABLE reels ADD COLUMN shares INTEGER DEFAULT 0'); } catch (e) {}
+db.exec(`CREATE TABLE IF NOT EXISTS notifications(id INTEGER PRIMARY KEY, user_id INTEGER, actor_id INTEGER, type TEXT, reel_id INTEGER, text TEXT DEFAULT '', created INTEGER, read INTEGER DEFAULT 0);`);
+function notify(userId, actorId, type, reelId, text) {
+  if (userId === actorId) return;
+  db.prepare('INSERT INTO notifications(user_id,actor_id,type,reel_id,text,created) VALUES(?,?,?,?,?,?)').run(userId, actorId, type, reelId || null, (text || '').slice(0, 140), Date.now());
+}
 
 const hash = (pw, salt) => crypto.scryptSync(pw, salt, 64).toString('hex');
 function makeUser(email, handle, name, pw, bio = '') {
@@ -91,7 +97,7 @@ function reelOut(r, me) {
     user: u ? { handle: u.handle, name: u.name } : null,
     likes: c('SELECT COUNT(*) n FROM likes WHERE reel_id=?').n,
     saves: c('SELECT COUNT(*) n FROM saves WHERE reel_id=?').n,
-    shares: 0,
+    shares: r.shares || 0,
     comments: c('SELECT COUNT(*) n FROM comments WHERE reel_id=?').n,
     liked: !!db.prepare('SELECT 1 FROM likes WHERE user_id=? AND reel_id=?').get(me, r.id),
     saved: !!db.prepare('SELECT 1 FROM saves WHERE user_id=? AND reel_id=?').get(me, r.id),
@@ -127,7 +133,10 @@ function toggle(req, res, table) {
   const rid = +req.params.id;
   const has = db.prepare(`SELECT 1 FROM ${table} WHERE user_id=? AND reel_id=?`).get(req.userId, rid);
   if (has) db.prepare(`DELETE FROM ${table} WHERE user_id=? AND reel_id=?`).run(req.userId, rid);
-  else db.prepare(`INSERT INTO ${table}(user_id,reel_id) VALUES(?,?)`).run(req.userId, rid);
+  else {
+    db.prepare(`INSERT INTO ${table}(user_id,reel_id) VALUES(?,?)`).run(req.userId, rid);
+    if (table === 'likes') { const r0 = db.prepare('SELECT user_id FROM reels WHERE id=?').get(rid); if (r0) notify(r0.user_id, req.userId, 'like', rid, 'liked your reel'); }
+  }
   const reel = db.prepare('SELECT * FROM reels WHERE id=?').get(rid);
   res.json({ reel: reelOut(reel, req.userId) });
 }
@@ -139,6 +148,8 @@ app.post('/api/reels/:id/comments', auth, (req, res) => {
   const text = (req.body.text || '').trim().slice(0, 500);
   if (!text) return res.status(400).json({ error: 'Empty comment' });
   const info = db.prepare('INSERT INTO comments(reel_id,user_id,text,created) VALUES(?,?,?,?)').run(+req.params.id, req.userId, text, Date.now());
+  const owner = db.prepare('SELECT user_id FROM reels WHERE id=?').get(+req.params.id);
+  if (owner) notify(owner.user_id, req.userId, 'comment', +req.params.id, text);
   res.json({ comment: { id: info.lastInsertRowid, text, created: Date.now(), user: { handle: getUser(req.userId).handle, name: getUser(req.userId).name } } });
 });
 app.post('/api/users/:handle/follow', auth, (req, res) => {
@@ -147,7 +158,7 @@ app.post('/api/users/:handle/follow', auth, (req, res) => {
   if (u.id === req.userId) return res.status(400).json({ error: 'cannot follow yourself' });
   const has = db.prepare('SELECT 1 FROM follows WHERE follower=? AND following=?').get(req.userId, u.id);
   if (has) db.prepare('DELETE FROM follows WHERE follower=? AND following=?').run(req.userId, u.id);
-  else db.prepare('INSERT INTO follows(follower,following) VALUES(?,?)').run(req.userId, u.id);
+  else { db.prepare('INSERT INTO follows(follower,following) VALUES(?,?)').run(req.userId, u.id); notify(u.id, req.userId, 'follow', null, 'started following you'); }
   res.json({ following: !has });
 });
 app.get('/api/users/:handle', auth, (req, res) => {
@@ -169,5 +180,46 @@ try {
   const n = db.prepare('SELECT COUNT(*) n FROM reels').get().n;
   if (n === 0) { require('child_process').execSync('node seed.js', { cwd: ROOT, stdio: 'inherit' }); }
 } catch (e) { console.error('seed check failed', e.message); }
+
+// ---------- phase 2: shares, notifications, discover, import ----------
+app.post('/api/reels/:id/share', auth, (req, res) => {
+  db.prepare('UPDATE reels SET shares=COALESCE(shares,0)+1 WHERE id=?').run(+req.params.id);
+  const reel = db.prepare('SELECT * FROM reels WHERE id=?').get(+req.params.id);
+  res.json({ reel: reelOut(reel, req.userId) });
+});
+app.get('/api/notifications', auth, (req, res) => {
+  const rows = db.prepare('SELECT n.*, u.handle, u.name FROM notifications n JOIN users u ON u.id=n.actor_id WHERE n.user_id=? ORDER BY n.created DESC LIMIT 60').all(req.userId);
+  const unread = db.prepare('SELECT COUNT(*) n FROM notifications WHERE user_id=? AND read=0').get(req.userId).n;
+  res.json({ unread, notifications: rows.map(n => ({ id: n.id, type: n.type, reel_id: n.reel_id, text: n.text, created: n.created, read: !!n.read, actor: { handle: n.handle, name: n.name } })) });
+});
+app.post('/api/notifications/read', auth, (req, res) => {
+  db.prepare('UPDATE notifications SET read=1 WHERE user_id=?').run(req.userId);
+  res.json({ ok: true });
+});
+app.get('/api/discover', auth, (req, res) => {
+  const q = (req.query.q || '').trim().toLowerCase();
+  let users = [], reels = [];
+  if (q) {
+    users = db.prepare('SELECT * FROM users WHERE lower(handle) LIKE ? OR lower(name) LIKE ? LIMIT 12').all('%' + q + '%', '%' + q + '%').map(pub);
+    reels = db.prepare('SELECT * FROM reels WHERE lower(caption) LIKE ? OR lower(channel) LIKE ? ORDER BY created DESC LIMIT 30').all('%' + q + '%', '%' + q + '%');
+  } else {
+    reels = db.prepare('SELECT r.*, (SELECT COUNT(*) FROM likes l WHERE l.reel_id=r.id) lc FROM reels r ORDER BY lc DESC, r.created DESC LIMIT 30').all();
+  }
+  const tagRows = db.prepare("SELECT caption FROM reels").all();
+  const tags = {};
+  tagRows.forEach(r => { (r.caption.match(/#[A-Za-z0-9_]+/g) || []).forEach(t => { tags[t] = (tags[t] || 0) + 1; }); });
+  const topTags = Object.entries(tags).sort((a, b) => b[1] - a[1]).slice(0, 12).map(([tag, count]) => ({ tag, count }));
+  res.json({ users, reels: reels.map(r => reelOut(r, req.userId)), topTags });
+});
+app.post('/api/import', upload.single('video'), (req, res) => {
+  const key = process.env.IMPORT_KEY;
+  if (!key || req.headers['x-import-key'] !== key) return res.status(403).json({ error: 'import not authorised' });
+  if (!req.file) return res.status(400).json({ error: 'No video received' });
+  const u = db.prepare('SELECT * FROM users WHERE handle=?').get((req.body.handle || '').toLowerCase());
+  if (!u) return res.status(404).json({ error: 'creator not found' });
+  const info = db.prepare('INSERT INTO reels(user_id,channel,file,caption,sound,created) VALUES(?,?,?,?,?,?)')
+    .run(u.id, (req.body.channel || '').slice(0, 40), req.file.filename, (req.body.caption || '').slice(0, 500), '', Date.now());
+  res.json({ reel: reelOut(db.prepare('SELECT * FROM reels WHERE id=?').get(info.lastInsertRowid), u.id) });
+});
 
 app.listen(PORT, () => console.log('Realist Reels Phase 1 listening on ' + PORT));

@@ -59,6 +59,15 @@
  #auth input{background:#1a1a21;border:1px solid #2a2a33;border-radius:12px;color:#fff;padding:13px 14px;font-size:16px}
  #auth .err{color:#ff6b8f;font-size:14px;min-height:18px;text-align:center}
  #auth .switch{background:none;border:0;color:#35be8b;cursor:pointer;font-size:14px;margin-top:12px}
+ .badge{position:absolute;top:-4px;right:6px;background:#ff2e63;color:#fff;font-size:10px;font-weight:800;min-width:17px;height:17px;border-radius:9px;display:none;align-items:center;justify-content:center;padding:0 4px}
+ nav button{position:relative}
+ .dsearch{display:flex;gap:8px;padding:12px}.dsearch input{flex:1;background:#1a1a21;border:1px solid #2a2a33;border-radius:12px;color:#fff;padding:11px 13px;font-size:15px}
+ .chips{display:flex;flex-wrap:wrap;gap:7px;padding:0 12px 12px}.chip{background:#1d2b24;color:#35be8b;border:1px solid #2c4638;border-radius:14px;padding:5px 11px;font-size:13px;font-weight:700;cursor:pointer}
+ .uitem{display:flex;align-items:center;gap:11px;padding:9px 14px;cursor:pointer}.uitem .ua{width:42px;height:42px;border-radius:50%;background:#35be8b;color:#04120b;font-weight:900;display:flex;align-items:center;justify-content:center}
+ .gwrap{position:relative}.gwrap .gl{position:absolute;left:6px;bottom:6px;font-size:12px;font-weight:700;text-shadow:0 1px 4px #000}
+ .nitem{display:flex;gap:11px;padding:11px 14px;border-bottom:1px solid #1c1c22;font-size:14px}.nitem.unread{background:#12241b}
+ .nitem .na{width:40px;height:40px;border-radius:50%;background:#35be8b;color:#04120b;font-weight:900;display:flex;align-items:center;justify-content:center;flex:none}
+ .nitem small{color:#888;display:block;margin-top:2px}
  .capbox{display:flex;gap:8px;margin-top:10px}.capbox input{flex:1;background:#22222a;border:0;border-radius:12px;color:#fff;padding:11px 13px;font-size:14px}
 </style>
 </head>
@@ -108,6 +117,19 @@
   <div class="grid" id="pgrid"></div>
 </div>
 
+<div class="page" id="discover">
+  <div class="top">Discover<button class="x" id="dx">✕</button></div>
+  <div class="dsearch"><input id="dq" placeholder="Search creators, captions, #hashtags…"></div>
+  <div class="chips" id="dchips"></div>
+  <div id="dusers"></div>
+  <div class="grid" id="dgrid" style="flex:1"></div>
+</div>
+
+<div class="page" id="inbox">
+  <div class="top">Inbox<button class="x" id="ix">✕</button></div>
+  <div id="nlist" style="overflow-y:auto;flex:1"></div>
+</div>
+
 <div class="toast" id="toast"></div>
 <input type="file" id="upfile" accept="video/*" hidden>
 
@@ -115,7 +137,7 @@
   <button class="on" id="nHome"><span class="ni">🏠</span>Home</button>
   <button id="nDisc"><span class="ni">🔍</span>Discover</button>
   <button id="nCreate"><span class="create">+</span></button>
-  <button id="nInbox"><span class="ni">💬</span>Inbox</button>
+  <button id="nInbox"><span class="ni">💬</span>Inbox<span class="badge" id="nbadge">0</span></button>
   <button id="nProf"><span class="ni">👤</span>Profile</button>
 </nav>
 
@@ -137,7 +159,7 @@ $('authform').addEventListener('submit',async e=>{e.preventDefault();$('a_err').
  }catch(err){$('a_err').textContent=err.message;}});
 async function enterApp(){
  $('auth').style.display='none';$('hdr').style.display='flex';$('feed').style.display='block';$('navb').style.display='flex';
- loadFeed();
+ loadFeed();refreshBadge();
 }
 (async()=>{try{const d=await api('/api/me');me=d.user;enterApp();}catch(e){}})();
 
@@ -150,7 +172,7 @@ async function loadFeed(){
  observe();
 }
 function reelEl(r){
- const el=document.createElement('section');el.className='reel';
+ const el=document.createElement('section');el.className='reel';el.dataset.rid=r.id;
  el.innerHTML=`
   <video src="${r.file}" loop playsinline preload="metadata"></video>
   <div class="prog"></div><div class="shade"></div><div class="heartburst">❤️</div>
@@ -162,7 +184,7 @@ function reelEl(r){
    <button data-act="like" class="${r.liked?'liked':''}"><span class="ic">❤️</span><span class="n">${fmt(r.likes)}</span></button>
    <button data-act="comment"><span class="ic">💬</span><span class="n">${fmt(r.comments)}</span></button>
    <button data-act="save" class="${r.saved?'saved':''}"><span class="ic">🔖</span><span class="n">${fmt(r.saves)}</span></button>
-   <button data-act="share"><span class="ic">↗️</span><span class="n">Share</span></button>
+   <button data-act="share"><span class="ic">↗️</span><span class="n">${fmt(r.shares)}</span></button>
    <button data-act="mute"><span class="ic">🔊</span></button>
   </div>`;
  el.querySelector('.cap').textContent=r.caption||'';
@@ -179,11 +201,12 @@ function burst(el){const h=el.querySelector('.heartburst');h.style.left='50%';h.
 async function toggleLike(r,el){try{const d=await post('/api/reels/'+r.id+'/like');Object.assign(r,d.reel);refreshRail(el,r);}catch(e){toast(e.message);}}
 function refreshRail(el,r){const like=el.querySelector('[data-act="like"]');like.classList.toggle('liked',r.liked);like.querySelector('.n').textContent=fmt(r.likes);
  const sv=el.querySelector('[data-act="save"]');sv.classList.toggle('saved',r.saved);sv.querySelector('.n').textContent=fmt(r.saves);
+ el.querySelector('[data-act="share"] .n').textContent=fmt(r.shares);
  el.querySelector('[data-act="comment"] .n').textContent=fmt(r.comments);}
 async function act(a,r,el){
  if(a==='like'){if(!r.liked)burst(el);toggleLike(r,el);}
  if(a==='save'){try{const d=await post('/api/reels/'+r.id+'/save');Object.assign(r,d.reel);refreshRail(el,r);toast(r.saved?'Saved':'Removed from saved');}catch(e){toast(e.message);}}
- if(a==='share'){if(navigator.share)navigator.share({title:'Realist Reels',text:r.caption,url:location.href}).catch(()=>{});else toast('Copy the page link to share');}
+ if(a==='share'){try{const d=await post('/api/reels/'+r.id+'/share');Object.assign(r,d.reel);refreshRail(el,r);}catch(e){} if(navigator.share)navigator.share({title:'Realist Reels',text:r.caption,url:location.href}).catch(()=>{});else toast('Copy the page link to share');}
  if(a==='mute'){const vs=document.querySelectorAll('video');const m=!vs[0].muted;vs.forEach(v=>v.muted=m);toast(m?'Muted':'Sound on');}
  if(a==='comment')openComments(r,el);
 }
@@ -220,12 +243,47 @@ $('pfollow').onclick=async()=>{const d=await post('/api/users/'+profileHandle+'/
 $('plogout').onclick=async()=>{await post('/api/logout');location.reload();};
 $('px').onclick=()=>$('profile').classList.remove('open');
 
+
+/* ---------- phase 2: discover + inbox ---------- */
+async function refreshBadge(){try{const d=await api('/api/notifications');const b=$('nbadge');b.textContent=d.unread;b.style.display=d.unread?'flex':'none';}catch(e){}}
+async function openInbox(){
+ $('inbox').classList.add('open');
+ try{const d=await api('/api/notifications');
+  $('nlist').innerHTML=d.notifications.length?d.notifications.map(n=>`<div class="nitem ${n.read?'':'unread'}"><div class="na">${n.actor.handle[0].toUpperCase()}</div><div><b>@${n.actor.handle}</b> <span class="nt"></span><small>${new Date(n.created).toLocaleString()}</small></div></div>`).join(''):'<div class="empty">No notifications yet.<br>Likes, comments and new followers land here.</div>';
+  [...$('nlist').querySelectorAll('.nt')].forEach((el,i)=>{el.textContent=d.notifications[i].text||d.notifications[i].type;});
+  await post('/api/notifications/read');refreshBadge();
+ }catch(e){toast(e.message);}
+}
+let dqTimer=null;
+$('dq').addEventListener('input',()=>{clearTimeout(dqTimer);dqTimer=setTimeout(()=>openDiscover($('dq').value),350);});
+async function openDiscover(q){
+ $('discover').classList.add('open');
+ try{const d=await api('/api/discover'+(q?('?q='+encodeURIComponent(q)):''));
+  $('dchips').innerHTML=(d.topTags||[]).map(t=>`<button class="chip">${t.tag} · ${t.count}</button>`).join('');
+  [...$('dchips').children].forEach(c=>c.onclick=()=>{$('dq').value=c.textContent.split(' ·')[0];openDiscover($('dq').value);});
+  $('dusers').innerHTML=(d.users||[]).map(u=>`<div class="uitem" data-h="${u.handle}"><div class="ua">${u.handle[0].toUpperCase()}</div><div><b>@${u.handle}</b><div style="color:#999;font-size:13px">${u.name}</div></div></div>`).join('');
+  [...$('dusers').children].forEach(el=>el.onclick=()=>openProfile(el.dataset.h));
+  const g=$('dgrid');g.innerHTML='';
+  d.reels.forEach(r=>{const w=document.createElement('div');w.className='gwrap';const v=document.createElement('video');v.src=r.file;v.muted=true;v.playsInline=true;v.preload='metadata';w.appendChild(v);const l=document.createElement('div');l.className='gl';l.textContent='❤️ '+fmt(r.likes);w.appendChild(l);w.onclick=()=>jumpToReel(r.id);g.appendChild(w);});
+ }catch(e){toast(e.message);}
+}
+async function jumpToReel(id){
+ $('discover').classList.remove('open');$('profile').classList.remove('open');
+ mode='foryou';$('tabForYou').classList.add('on');$('tabFollowing').classList.remove('on');
+ await loadFeed();
+ const el=document.querySelector(`.reel[data-rid="${id}"]`);
+ if(el)el.scrollIntoView();else toast('That reel is not in the feed yet');
+}
+setInterval(()=>{if(me)refreshBadge();},60000);
+
 /* ---------- nav & upload ---------- */
 $('tabForYou').onclick=()=>{mode='foryou';$('tabForYou').classList.add('on');$('tabFollowing').classList.remove('on');loadFeed();};
 $('tabFollowing').onclick=()=>{mode='following';$('tabFollowing').classList.add('on');$('tabForYou').classList.remove('on');loadFeed();};
 $('nHome').onclick=()=>{$('profile').classList.remove('open');$('feed').scrollTo({top:0,behavior:'smooth'});};
-$('nDisc').onclick=()=>toast('Discover lands in Phase 2');
-$('nInbox').onclick=()=>toast('Inbox lands in Phase 2');
+$('nDisc').onclick=()=>{openDiscover('');};
+$('dx').onclick=()=>$('discover').classList.remove('open');
+$('nInbox').onclick=()=>{openInbox();};
+$('ix').onclick=()=>$('inbox').classList.remove('open');
 $('nProf').onclick=()=>openProfile(me.handle);
 $('nCreate').onclick=()=>$('upsheet').classList.add('open');
 $('ux').onclick=()=>$('upsheet').classList.remove('open');
