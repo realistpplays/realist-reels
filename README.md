@@ -9,8 +9,9 @@ node seed.js        # (re)seed creator accounts + Paul's reels — safe to re-ru
 ```
 Server log: `server.log`. Database: `data/realist-reels.db`. Uploads: `uploads/`.
 
-## Status (2026-10-23)
-- Backend + frontend complete; end-to-end tested locally (signup, login, feed, like, comment, follow, following-feed, upload, video range streaming, wrong-password rejection) — all passed. Test data cleaned out.
-- Seeded creators: @gullygamez (4 full reels), @realistreacts (channel intro). Their passwords are locked random — Paul claims/renames them when admin tools land.
-- HOSTING GAP: the app is NOT on a public URL yet. This VM's internet egress is HTTP-proxy-only, so Cloudflare Tunnel (TLS handshake fails), localhost.run SSH and localtunnel all fail from here. Next step is a real host (Render/Railway/Fly.io free tier) using Paul's realistpplays@gmail.com, or a Tailscale Funnel with Paul's approval tap. Code is deploy-ready: `PORT` env, single `node server.js`, no build step.
-- Note: server runs via nohup — if the VM is replaced it needs `./start.sh` again (or move to the real host, which removes this fragility).
+## Status (2026-10-23) — LIVE
+- **Public URL: https://realist-reels.onrender.com** (Render free web service "realist-reels", Blueprint from this repo, commit eb1e211). Verified live end-to-end from outside: homepage 200, signup, feed = 5 seeded reels, like persists, video range-stream 206, unauthenticated feed 401.
+- Accounts: GitHub @realistpplays (created 2026-10-23, realistpplays@gmail.com, password in Paul's Secure Vault) owns this repo; Render account created via GitHub OAuth on the same account; Render GitHub app has access to this repo only.
+- Seeded creators: @gullygamez (4 full reels), @realistreacts (channel intro). Their passwords are locked random — Paul claims/renames them when admin tools land. A "livecheck" test account (id 3) also exists from go-live verification.
+- FREE-TIER LIMITS (Render): service spins down after ~15 min idle (≈1 min cold start on next visit); filesystem is ephemeral — user accounts/uploads can reset on restart/redeploy; the 5 seeded reels always return automatically via boot-seed. Removing these limits = Render paid plan + persistent disk, or external storage/DB (Phase 2 decision for Paul).
+- Local copy still runs via `./start.sh` (port 3737) for development.
