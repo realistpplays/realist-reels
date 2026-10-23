@@ -222,4 +222,70 @@ app.post('/api/import', upload.single('video'), (req, res) => {
   res.json({ reel: reelOut(db.prepare('SELECT * FROM reels WHERE id=?').get(info.lastInsertRowid), u.id) });
 });
 
+// ---------- Muse-style interest Feed dashboard ----------
+// Paul's interests as data — new interests/sources get added here (his brief: "in the future I'll add more").
+const INTERESTS = [
+  { id: 'football', label: 'Football', angle: 'Realist Reacts / Football Fix', feeds: [
+    { name: 'BBC Sport', url: 'https://feeds.bbci.co.uk/sport/football/rss.xml' } ] },
+  { id: 'gaming', label: 'Gaming', angle: 'Gully Games', feeds: [
+    { name: 'Eurogamer', url: 'https://www.eurogamer.net/feed' },
+    { name: 'BBC Technology', url: 'https://feeds.bbci.co.uk/news/technology/rss.xml', match: ['game', 'gaming', 'xbox', 'playstation', 'nintendo', 'fortnite', 'gta', 'roblox', 'minecraft'] } ] },
+  { id: 'music', label: 'UK Rap & Music', angle: 'Realist Reacts (music)', feeds: [
+    { name: 'BBC Ents & Arts', url: 'https://feeds.bbci.co.uk/news/entertainment_and_arts/rss.xml', match: ['rap', 'drill', 'grime', 'hip-hop', 'hip hop', 'album', 'rapper', 'music', 'song', 'gig', 'festival', 'chart'] } ] },
+  { id: 'viral', label: 'Viral & Real Talk', angle: 'Realist Reacts / Real Talk', feeds: [
+    { name: 'BBC News', url: 'https://feeds.bbci.co.uk/news/rss.xml' } ] },
+  { id: 'grafting', label: 'Grafting & Money', angle: 'Real Talk', feeds: [
+    { name: 'BBC Business', url: 'https://feeds.bbci.co.uk/news/business/rss.xml' },
+    { name: 'CoinDesk', url: 'https://www.coindesk.com/arc/outboundfeeds/rss/' } ] },
+  { id: 'creator', label: 'Creator Tech', angle: 'Creator growth', feeds: [
+    { name: 'BBC Technology', url: 'https://feeds.bbci.co.uk/news/technology/rss.xml', match: ['ai', 'artificial intelligence', 'youtube', 'tiktok', 'instagram', 'video', 'creator', 'streaming', 'social media'] } ] },
+];
+const feedCache = { at: 0, items: [] };
+const xmlDec = t => (t || '').replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1').replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'").trim();
+function parseRSS(xml, source) {
+  const out = [];
+  for (const m of xml.matchAll(/<item>([\s\S]*?)<\/item>/g)) {
+    const b = m[1];
+    const grab = tag => { const mm = b.match(new RegExp('<' + tag + '[^>]*>([\\s\\S]*?)<\\/' + tag + '>')); return mm ? xmlDec(mm[1]) : ''; };
+    const title = grab('title'); let link = grab('link');
+    if (!link) { const lm = b.match(/<link[^>]*href="([^"]+)"/); link = lm ? lm[1] : ''; }
+    const when = Date.parse(grab('pubDate')) || Date.now();
+    out.push({ title, link, summary: grab('description').slice(0, 220), source, published: when });
+    if (out.length >= 25) break;
+  }
+  return out;
+}
+async function refreshNews() {
+  if (Date.now() - feedCache.at < 15 * 60 * 1000 && feedCache.items.length) return feedCache.items;
+  const jobs = [];
+  for (const interest of INTERESTS) for (const f of interest.feeds) jobs.push((async () => {
+    try {
+      const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 9000);
+      const r = await fetch(f.url, { signal: ctl.signal, redirect: 'follow', headers: { 'User-Agent': 'RealistReels/1.0' } });
+      clearTimeout(t);
+      if (!r.ok) return [];
+      const items = parseRSS(await r.text(), f.name);
+      return items.filter(it => {
+        if (!f.match) return true;
+        const h = (it.title + ' ' + it.summary).toLowerCase();
+        return f.match.some(k => h.includes(k));
+      }).map(it => ({ ...it, category: interest.id, categoryLabel: interest.label, angle: interest.angle }));
+    } catch (e) { return []; }
+  })());
+  const all = (await Promise.all(jobs)).flat();
+  const seen = new Set(); const ded = [];
+  for (const it of all.sort((a, b) => b.published - a.published)) {
+    const k = it.title.toLowerCase().slice(0, 60);
+    if (seen.has(k) || !it.title) continue;
+    seen.add(k); ded.push(it);
+  }
+  feedCache.at = Date.now(); feedCache.items = ded.slice(0, 80);
+  return feedCache.items;
+}
+app.get('/api/newsfeed', auth, async (req, res) => {
+  const items = await refreshNews();
+  const cat = (req.query.cat || 'all');
+  res.json({ interests: INTERESTS.map(i => ({ id: i.id, label: i.label })), items: cat === 'all' ? items : items.filter(i => i.category === cat), updated: feedCache.at });
+});
+
 app.listen(PORT, () => console.log('Realist Reels Phase 1 listening on ' + PORT));
